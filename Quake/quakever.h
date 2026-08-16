@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef QUAKEVER_H
 #define QUAKEVER_H
 
-#define VERSION			 1.09
+#define VERSION			 16.08
 #define GLQUAKE_VERSION	 1.00
 #define D3DQUAKE_VERSION 0.01
 #define WINQUAKE_VERSION 0.996
@@ -38,7 +38,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define VKQUAKE_VERSION_MINOR 35
 #define VKQUAKE_VER_PATCH	  1
 
-#define VKQUAKE_VERSION		   1.35
+#define VKQUAKE_VERSION		   16.08
 #define VKQUAKE_COPYRIGHT_YEAR "2026"
 
 #define LINUX_VERSION VKQUAKE_VERSION
@@ -59,7 +59,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define ENGINE_NAME_AND_VER "vkQuake " QS_STRINGIFY (QSS_DATE) VKQUAKE_VER_SUFFIX
 #else
 #define ENGINE_NAME_AND_VER \
-	"vkQuake"               \
+	"VkQSrc"               \
 	" " VKQUAKE_VER_STRING
 #endif
 #endif /* QUAKEVER_H */

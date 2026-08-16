@@ -1,0 +1,27 @@
+// default config
+exec default.cfg
+
+// modifed config 
+exec config.cfg
+
+// usermade autoexec
+exec autoexec.cfg
+
+//commands
+stuffcmds
+
+// demos
+startdemos demo1 demo2 demo3
+
+wait
+Echo
+Echo ==============================
+Echo check out our commands
+Echo Zoom90 or Zoom120 for the zoom function
+Echo Dev for development bindings
+Echo Cam for the camera system we use for the main menu demos
+Echo ==============================
+Echo
+Echo ==============================
+Echo LibreQuake Version V0.09-beta
+Echo ==============================
