@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // snd_mix.c -- portable code to mix sounds for snd_dma.c
 
 #include "quakedef.h"
+#include "steam_audio.h"
 
 #define PAINTBUFFER_SIZE 2048
 static portable_samplepair_t paintbuffer[PAINTBUFFER_SIZE];
@@ -395,8 +396,15 @@ CHANNEL MIXING
 
 static void SND_PaintChannelFrom8 (channel_t *ch, sfxcache_t *sc, int endtime, int paintbufferstart);
 static void SND_PaintChannelFrom16 (channel_t *ch, sfxcache_t *sc, int endtime, int paintbufferstart);
+#ifdef USE_STEAMAUDIO
+static void	   SND_PaintChannelFromSteamAudio (channel_t *ch, sfxcache_t *sc, int count, int paintbufferstart);
+static qboolean SND_ShouldSpatialize (channel_t *ch, sfxcache_t *sc);
+#endif
 
 extern cvar_t snd_pauselooping;
+#ifdef USE_STEAMAUDIO
+extern cvar_t snd_steamaudio;
+#endif
 
 void S_PaintChannels (int endtime)
 {
@@ -447,6 +455,10 @@ void S_PaintChannels (int endtime)
 					// to start painting to in the paintbuffer, usually 0.
 					if (sc->width == 1)
 						SND_PaintChannelFrom8 (ch, sc, count, ltime - paintedtime);
+#ifdef USE_STEAMAUDIO
+					else if (SND_ShouldSpatialize (ch, sc))
+						SND_PaintChannelFromSteamAudio (ch, sc, count, ltime - paintedtime);
+#endif
 					else
 						SND_PaintChannelFrom16 (ch, sc, count, ltime - paintedtime);
 
@@ -593,3 +605,100 @@ static void SND_PaintChannelFrom16 (channel_t *ch, sfxcache_t *sc, int count, in
 
 	ch->pos += count;
 }
+
+#ifdef USE_STEAMAUDIO
+
+/*
+==============
+SND_ShouldSpatialize
+
+Only 16-bit mono sfx get HRTF treatment, and only when there's an
+actual stereo output device to spatialize onto. Sounds from the
+player's own entity skip it too -- SND_Spatialize already special-cases
+those to full volume with no panning, so there's no direction to
+spatialize against.
+==============
+*/
+static qboolean SND_ShouldSpatialize (channel_t *ch, sfxcache_t *sc)
+{
+	return snd_steamaudio.value != 0 && SteamAudio_Available () && shm->channels == 2 && !sc->stereo && ch->entnum != cl.viewentity;
+}
+
+/*
+==============
+SND_PaintChannelFromSteamAudio
+
+Drop-in replacement for SND_PaintChannelFrom16 that routes the channel
+through Steam Audio's HRTF binaural effect instead of vkQuake's own
+amplitude panning. Distance attenuation is still computed the same way
+SND_Spatialize does it; the left/right *panning* is left entirely to
+Steam Audio, since that's the whole point of doing this.
+==============
+*/
+static void SND_PaintChannelFromSteamAudio (channel_t *ch, sfxcache_t *sc, int count, int paintbufferstart)
+{
+	signed short *sfx;
+	int			  i;
+	vec3_t		  rel, dir;
+	float		  dist, gain;
+
+	TEMP_ALLOC (float, mono, count);
+
+	sfx = (signed short *)sc->data + ch->pos;
+	for (i = 0; i < count; i++)
+		mono[i] = sfx[i] * (1.0f / 32768.0f);
+
+	// Listener-relative direction, projected onto the listener's own local
+	// axes (forward/right/up), so we don't have to reason about Quake's
+	// world-space orientation at all -- same trick SND_Spatialize already
+	// uses for its stereo separation dot product, just for all 3 axes.
+	//
+	// NOTE: the mapping from (local_right, local_up, local_forward) to
+	// Steam Audio's IPLVector3 (x, y, z) below assumes Steam Audio's
+	// convention is +x right, +y up, +z toward the listener (-forward).
+	// This is the common convention for Steam Audio's game-engine
+	// integrations, but I haven't been able to verify it against this
+	// exact SDK build/example. If sounds come from the wrong side or
+	// front/back is swapped once this is running, flip the sign of the
+	// corresponding component here.
+	VectorSubtract (ch->origin, listener_origin, rel);
+	dist = VectorLength (rel);
+	if (dist > 0.0001f)
+	{
+		vec3_t n;
+		VectorScale (rel, 1.0f / dist, n);
+		dir[0] = DotProduct (n, listener_right);
+		dir[1] = DotProduct (n, listener_up);
+		dir[2] = -DotProduct (n, listener_forward);
+	}
+	else
+	{
+		// source is (effectively) at the listener's position -- direction
+		// is meaningless, so just pick something arbitrary and let
+		// distance attenuation (which will be ~full volume) dominate.
+		dir[0] = 0.0f;
+		dir[1] = 0.0f;
+		dir[2] = -1.0f;
+	}
+
+	// distance attenuation only, no pan -- Steam Audio supplies the pan.
+	dist *= ch->dist_mult;
+	gain = ch->master_vol * (1.0f - dist);
+	if (gain < 0.0f)
+		gain = 0.0f;
+	// scale to line up with SND_PaintChannelFrom16's fixed-point range:
+	// that path multiplies a raw int16 sample directly by
+	// (ch->leftvol * snd_vol / 256); our mono[] is already the int16
+	// sample pre-divided by 32768, so multiply back up by 32768 here.
+	gain *= snd_vol * (32768.0f / 256.0f);
+
+	SteamAudio_ProcessChannel (
+		(int) (ch - snd_channels), dir, gain, mono, count, (int *)paintbuffer + paintbufferstart * 2, (int *)paintbuffer + paintbufferstart * 2 + 1,
+		2);
+
+	ch->pos += count;
+
+	TEMP_FREE (mono);
+}
+
+#endif /* USE_STEAMAUDIO */

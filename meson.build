@@ -443,7 +443,7 @@ incdirs = [
 steam_audio_inc = include_directories()
 steam_audio_inc_rel = 'ThirdParty/SteamAudio/include'
 if import('fs').exists(meson.project_source_root() / steam_audio_inc_rel)
-    steam_audio_inc = include_directories(steam_audio_vendor_inc_rel )
+    steam_audio_inc = include_directories(steam_audio_inc_rel)
 endif
 
 if import('fs').exists(meson.project_source_root() / 'include' / 'phonon.h' )

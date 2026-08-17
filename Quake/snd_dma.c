@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "snd_codec.h"
 #include "bgmusic.h"
+#include "steam_audio.h"
 
 static void S_Play (void);
 static void S_PlayVol (void);
@@ -87,6 +88,8 @@ cvar_t snd_mixspeed = {"snd_mixspeed", "44100", CVAR_NONE};
 cvar_t snd_waterfx = {"snd_waterfx", "1", CVAR_ARCHIVE};
 
 cvar_t snd_pauselooping = {"snd_pauselooping", "1", CVAR_ARCHIVE};
+
+cvar_t snd_steamaudio = {"snd_steamaudio", "1", CVAR_ARCHIVE};
 
 #if defined(_WIN32)
 #define SND_FILTERQUALITY_DEFAULT "5"
@@ -152,6 +155,7 @@ void S_Startup (void)
 	else
 	{
 		Con_Printf ("Audio: %d bit, %s, %d Hz\n", shm->samplebits, (shm->channels == 2) ? "stereo" : "mono", shm->speed);
+		SteamAudio_Init (shm->speed);
 	}
 }
 
@@ -187,6 +191,7 @@ void S_Init (void)
 	Cvar_RegisterVariable (&snd_filterquality);
 	Cvar_RegisterVariable (&snd_waterfx);
 	Cvar_RegisterVariable (&snd_pauselooping);
+	Cvar_RegisterVariable (&snd_steamaudio);
 
 	if (safemode || COM_CheckParm ("-nosound"))
 		return;
@@ -245,6 +250,8 @@ void S_Shutdown (void)
 
 	sound_started = 0;
 	snd_blocked = 0;
+
+	SteamAudio_Shutdown ();
 
 	S_CodecShutdown ();
 
@@ -489,6 +496,7 @@ void S_StartSound (int entnum, int entchannel, sfx_t *sfx, vec3_t origin, float 
 	target_chan->sfx = sfx;
 	target_chan->pos = 0.0;
 	target_chan->end = paintedtime + sc->length;
+	SteamAudio_ResetChannel (target_chan - snd_channels);
 
 	// if an identical sound has also been started this frame, offset the pos
 	// a bit to keep it from just making the first one louder
@@ -646,6 +654,7 @@ void S_StaticSound (sfx_t *sfx, vec3_t origin, int vol, float attenuation)
 	ss->master_vol = vol;
 	ss->dist_mult = (attenuation / 64) / sound_nominal_clip_dist;
 	ss->end = paintedtime + sc->length;
+	SteamAudio_ResetChannel (ss - snd_channels);
 
 	SND_Spatialize (ss);
 
