@@ -86,6 +86,8 @@ out_left/out_right/out_stride - out_left[i*out_stride] and
 void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, float occlusion, const float *in_mono, int count,
 								 int *out_left, int *out_right, int out_stride);
 
+qboolean SND_ShouldSpatialize (channel_t *ch, sfxcache_t *sc);
+
 #else /* !USE_STEAMAUDIO */
 
 static inline qboolean SteamAudio_Init (int samplerate)

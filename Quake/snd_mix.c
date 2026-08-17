@@ -397,8 +397,11 @@ CHANNEL MIXING
 static void SND_PaintChannelFrom8 (channel_t *ch, sfxcache_t *sc, int endtime, int paintbufferstart);
 static void SND_PaintChannelFrom16 (channel_t *ch, sfxcache_t *sc, int endtime, int paintbufferstart);
 #ifdef USE_STEAMAUDIO
-static void	   SND_PaintChannelFromSteamAudio (channel_t *ch, sfxcache_t *sc, int count, int paintbufferstart);
-static qboolean SND_ShouldSpatialize (channel_t *ch, sfxcache_t *sc);
+static void SND_PaintChannelFromSteamAudio (channel_t *ch, sfxcache_t *sc, int count, int paintbufferstart);
+/* SND_ShouldSpatialize is declared in steam_audio.h -- S_Update() in
+   snd_dma.c also needs it, to keep the static-sound combining pass from
+   merging (and thereby silencing) channels that are meant to be
+   individually spatialized. See the comment there. */
 #endif
 
 extern cvar_t snd_pauselooping;
@@ -619,7 +622,7 @@ those to full volume with no panning, so there's no direction to
 spatialize against.
 ==============
 */
-static qboolean SND_ShouldSpatialize (channel_t *ch, sfxcache_t *sc)
+qboolean SND_ShouldSpatialize (channel_t *ch, sfxcache_t *sc)
 {
 	return snd_steamaudio.value != 0 && SteamAudio_Available () && shm->channels == 2 && !sc->stereo && ch->entnum != cl.viewentity;
 }

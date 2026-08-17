@@ -873,6 +873,14 @@ void S_Update (vec3_t origin, vec3_t forward, vec3_t right, vec3_t up)
 
 		if (i >= MAX_DYNAMIC_CHANNELS + NUM_AMBIENTS)
 		{
+#ifdef USE_STEAMAUDIO
+			sfxcache_t *ssc = S_LoadSound (ch->sfx);
+			if (ssc && SND_ShouldSpatialize (ch, ssc))
+			{
+				combine = NULL; // don't let a later same-sfx channel fold into this one either
+				continue;
+			}
+#endif
 			// see if it can just use the last one
 			if (combine && combine->sfx == ch->sfx)
 			{
@@ -886,7 +894,14 @@ void S_Update (vec3_t origin, vec3_t forward, vec3_t right, vec3_t up)
 			for (j = MAX_DYNAMIC_CHANNELS + NUM_AMBIENTS; j < i; j++, combine++)
 			{
 				if (combine->sfx == ch->sfx)
+				{
+#ifdef USE_STEAMAUDIO
+					sfxcache_t *csc = S_LoadSound (combine->sfx);
+					if (csc && SND_ShouldSpatialize (combine, csc))
+						continue; // that one is being individually spatialized -- keep looking
+#endif
 					break;
+				}
 			}
 
 			if (j == total_channels)
