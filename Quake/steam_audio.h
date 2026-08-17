@@ -65,6 +65,12 @@ gain        - linear multiplier applied to Steam Audio's [-1,1]-ish
               output before adding into out_left/out_right. Callers
               should scale this to match the fixed-point range the
               rest of the mixer uses (see snd_mix.c).
+occlusion   - [0,1], 1 = fully visible, 0 = fully occluded. Applied via
+              Steam Audio's IPLDirectEffect *before* the binaural
+              effect. Callers currently derive this from a single BSP
+              hull-trace fraction (see snd_mix.c), which is a soft,
+              non-physical approximation -- not sphere-sampled partial
+              occlusion -- but avoids a hard on/off pop at wall edges.
 in_mono     - `count` samples, mono, normalized to roughly [-1,1].
 count       - number of samples this call; does NOT need to be a
               multiple of STEAMAUDIO_FRAMESIZE.
@@ -77,8 +83,8 @@ out_left/out_right/out_stride - out_left[i*out_stride] and
               and that+1, out_stride=2, to target vkQuake's
               portable_samplepair_t paint buffer directly.
 */
-void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, const float *in_mono, int count, int *out_left,
-								 int *out_right, int out_stride);
+void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, float occlusion, const float *in_mono, int count,
+								 int *out_left, int *out_right, int out_stride);
 
 #else /* !USE_STEAMAUDIO */
 
@@ -100,12 +106,13 @@ static inline void SteamAudio_ResetChannel (int channel_idx)
 	(void) channel_idx;
 }
 
-static inline void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, const float *in_mono, int count,
-											   int *out_left, int *out_right, int out_stride)
+static inline void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, float occlusion, const float *in_mono,
+											   int count, int *out_left, int *out_right, int out_stride)
 {
 	(void) channel_idx;
 	(void) direction;
 	(void) gain;
+	(void) occlusion;
 	(void) in_mono;
 	(void) count;
 	(void) out_left;

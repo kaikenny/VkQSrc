@@ -15,7 +15,8 @@ source and the define together, only after finding libphonon.
 
 typedef struct
 {
-	IPLBinauralEffect effect; /* NULL until first used */
+	IPLBinauralEffect effect;		 /* NULL until first used */
+	IPLDirectEffect	  direct_effect; /* NULL until first used; applies occlusion */
 
 	float in_buf[STEAMAUDIO_FRAMESIZE];
 	int	  in_count; /* valid samples currently buffered in in_buf */
@@ -32,6 +33,13 @@ static qboolean			 sa_initialized = false;
 static sa_channel_t sa_channels[MAX_CHANNELS];
 
 static IPLAudioBuffer sa_scratch_out;
+
+/* Output of the direct (occlusion) effect for whichever channel is
+   currently being processed -- feeds into the binaural effect below.
+   Processing is fully serialized (single mixer thread, one frame
+   processed at a time under snd_mutex -- see snd_dma.c/snd_mix.c), so
+   a single shared scratch buffer is safe, same as sa_scratch_out. */
+static float sa_scratch_direct[STEAMAUDIO_FRAMESIZE];
 
 qboolean SteamAudio_Init (int samplerate)
 {
@@ -98,6 +106,8 @@ void SteamAudio_Shutdown (void)
 	{
 		if (sa_channels[i].effect)
 			iplBinauralEffectRelease (&sa_channels[i].effect);
+		if (sa_channels[i].direct_effect)
+			iplDirectEffectRelease (&sa_channels[i].direct_effect);
 	}
 	memset (sa_channels, 0, sizeof (sa_channels));
 
@@ -132,32 +142,66 @@ void SteamAudio_ResetChannel (int channel_idx)
 static qboolean SA_EnsureEffect (sa_channel_t *c)
 {
 	IPLBinauralEffectSettings effectSettings;
+	IPLDirectEffectSettings   directSettings;
 
-	if (c->effect)
-		return true;
-
-	memset (&effectSettings, 0, sizeof (effectSettings));
-	effectSettings.hrtf = sa_hrtf;
-
-	if (iplBinauralEffectCreate (sa_context, &sa_audiosettings, &effectSettings, &c->effect) != IPL_STATUS_SUCCESS)
+	if (!c->effect)
 	{
-		Con_Printf ("SteamAudio: iplBinauralEffectCreate failed\n");
-		c->effect = NULL;
-		return false;
+		memset (&effectSettings, 0, sizeof (effectSettings));
+		effectSettings.hrtf = sa_hrtf;
+
+		if (iplBinauralEffectCreate (sa_context, &sa_audiosettings, &effectSettings, &c->effect) != IPL_STATUS_SUCCESS)
+		{
+			Con_Printf ("SteamAudio: iplBinauralEffectCreate failed\n");
+			c->effect = NULL;
+			return false;
+		}
 	}
+
+	if (!c->direct_effect)
+	{
+		memset (&directSettings, 0, sizeof (directSettings));
+		directSettings.numChannels = 1; /* mono in, mono out -- runs before the binaural effect */
+
+		if (iplDirectEffectCreate (sa_context, &sa_audiosettings, &directSettings, &c->direct_effect) != IPL_STATUS_SUCCESS)
+		{
+			Con_Printf ("SteamAudio: iplDirectEffectCreate failed\n");
+			c->direct_effect = NULL;
+			return false;
+		}
+	}
+
 	return true;
 }
 
-static void SA_RunFrame (sa_channel_t *c, const vec3_t direction)
+static void SA_RunFrame (sa_channel_t *c, const vec3_t direction, float occlusion)
 {
+	IPLDirectEffectParams	 directParams;
 	IPLBinauralEffectParams params;
 	float				   *indata[1];
+	float				   *directdata[1];
 	IPLAudioBuffer			inbuf;
+	IPLAudioBuffer			directbuf;
 
 	indata[0] = c->in_buf;
 	inbuf.numChannels = 1;
 	inbuf.numSamples = STEAMAUDIO_FRAMESIZE;
 	inbuf.data = indata;
+
+	directdata[0] = sa_scratch_direct;
+	directbuf.numChannels = 1;
+	directbuf.numSamples = STEAMAUDIO_FRAMESIZE;
+	directbuf.data = directdata;
+
+	if (occlusion < 0.0f)
+		occlusion = 0.0f;
+	else if (occlusion > 1.0f)
+		occlusion = 1.0f;
+
+	memset (&directParams, 0, sizeof (directParams));
+	directParams.flags = IPL_DIRECTEFFECTFLAGS_APPLYOCCLUSION;
+	directParams.occlusion = occlusion;
+
+	iplDirectEffectApply (c->direct_effect, &directParams, &inbuf, &directbuf);
 
 	memset (&params, 0, sizeof (params));
 	params.direction.x = direction[0];
@@ -168,15 +212,15 @@ static void SA_RunFrame (sa_channel_t *c, const vec3_t direction)
 	params.hrtf = sa_hrtf;
 	params.peakDelays = NULL;
 
-	iplBinauralEffectApply (c->effect, &params, &inbuf, &sa_scratch_out);
+	iplBinauralEffectApply (c->effect, &params, &directbuf, &sa_scratch_out);
 	iplAudioBufferInterleave (sa_context, &sa_scratch_out, c->out_buf);
 
 	c->out_avail = STEAMAUDIO_FRAMESIZE;
 	c->in_count = 0;
 }
 
-void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, const float *in_mono, int count, int *out_left,
-								 int *out_right, int out_stride)
+void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float gain, float occlusion, const float *in_mono, int count,
+								 int *out_left, int *out_right, int out_stride)
 {
 	sa_channel_t *c;
 	int			  written = 0;
@@ -229,7 +273,7 @@ void SteamAudio_ProcessChannel (int channel_idx, const vec3_t direction, float g
 
 		if (c->in_count >= STEAMAUDIO_FRAMESIZE)
 		{
-			SA_RunFrame (c, direction);
+			SA_RunFrame (c, direction, occlusion);
 			continue;
 		}
 

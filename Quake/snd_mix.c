@@ -640,7 +640,8 @@ static void SND_PaintChannelFromSteamAudio (channel_t *ch, sfxcache_t *sc, int c
 	signed short *sfx;
 	int			  i;
 	vec3_t		  rel, dir;
-	float		  dist, gain;
+	float		  dist, gain, occlusion;
+	trace_t		  trace;
 
 	TEMP_ALLOC (float, mono, count);
 
@@ -692,9 +693,19 @@ static void SND_PaintChannelFromSteamAudio (channel_t *ch, sfxcache_t *sc, int c
 	// sample pre-divided by 32768, so multiply back up by 32768 here.
 	gain *= snd_vol * (32768.0f / 256.0f);
 
+	occlusion = 1.0f;
+	if (cl.worldmodel)
+	{
+		memset (&trace, 0, sizeof (trace));
+		trace.fraction = 1.0f;
+		trace.allsolid = true;
+		SV_RecursiveHullCheck (&cl.worldmodel->hulls[0], listener_origin, ch->origin, &trace, CONTENTMASK_FROMQ1 (CONTENTS_SOLID));
+		occlusion = trace.fraction;
+	}
+
 	SteamAudio_ProcessChannel (
-		(int) (ch - snd_channels), dir, gain, mono, count, (int *)paintbuffer + paintbufferstart * 2, (int *)paintbuffer + paintbufferstart * 2 + 1,
-		2);
+		(int) (ch - snd_channels), dir, gain, occlusion, mono, count, (int *)paintbuffer + paintbufferstart * 2,
+		(int *)paintbuffer + paintbufferstart * 2 + 1, 2);
 
 	ch->pos += count;
 
