@@ -100,7 +100,7 @@ static qboolean S_XMP_CodecOpenStream (snd_stream_t *stream)
 	if (shm->speed > XMP_MAX_SRATE)
 		stream->info.rate = 44100;
 	else if (shm->speed < XMP_MIN_SRATE)
-		stream->info.rate = 11025;
+		stream->info.rate = 48000;
 	else
 		stream->info.rate = shm->speed;
 	stream->info.bits = shm->samplebits;
