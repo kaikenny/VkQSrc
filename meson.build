@@ -440,6 +440,48 @@ incdirs = [
     'Quake/mimalloc',
 ]
 
+steam_audio_inc = include_directories()
+steam_audio_inc_rel = 'ThirdParty/SteamAudio/include'
+if import('fs').exists(meson.project_source_root() / steam_audio_inc_rel)
+    steam_audio_inc = include_directories(steam_audio_vendor_inc_rel )
+endif
+
+if import('fs').exists(meson.project_source_root() / 'include' / 'phonon.h' )
+    steam_audio_inc = include_directories( 'include' )
+endif
+
+
+steam_audio_lib_dir = ''
+if host_machine.system() == 'windows'
+    steam_audio_lib_dir = meson.project_source_root() / 'lib' / 'windows-x64'
+elif host_machine.system() == 'darwin'
+    steam_audio_lib_dir = meson.project_source_root() / 'lib' / 'osx'
+else
+    steam_audio_lib_dir = meson.project_source_root() / 'lib' / 'linux-x64'
+endif
+
+steam_audio_lib = cc.find_library('phonon', dirs : steam_audio_lib_dir, required : false)
+
+link_args = []
+if steam_audio_lib.found()
+    deps += steam_audio_lib
+    incdirs += steam_audio_inc
+    # compile the Steam Audio wrapper source so we have init/shutdown hooks
+    srcs += 'Quake/steam_audio.c'
+    cflags += '-DUSE_STEAMAUDIO'
+    # add runtime rpath so the vendored library is found when running the built binary
+    if host_machine.system() != 'windows'
+        if host_machine.system() == 'darwin'
+            link_args += ['-Wl,-rpath,@loader_path/../lib/osx']
+        else
+            link_args += ['-Wl,-rpath,$ORIGIN/../lib/linux-x64']
+        endif
+    endif
+    message('Info: steam audio (phonon) found and enabled.')
+else
+    message('Info: steam audio (phonon) not found — continuing without it.')
+endif
+
 executable(
     'vkquake',
     [srcs, shaders_c],
