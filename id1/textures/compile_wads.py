@@ -5,6 +5,7 @@ import glob
 def make():
     wads_list = [
         'lq_dev',
+        'src_dev',
         'lq_dev_legacy',
         'lq_flesh',
         'lq_greek',
