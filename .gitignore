@@ -44,3 +44,4 @@ helgrind.log
 *.user
 /id1/maps/src
 /id1/maps/src
+*.log

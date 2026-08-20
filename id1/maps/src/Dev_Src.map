@@ -191,7 +191,7 @@
 }
 // entity 8
 {
-"classname" "ambient_light_buzz"
+"classname" "ambient_comp_hum"
 "origin" "-120 -8 152"
 "angle" "0"
 }
